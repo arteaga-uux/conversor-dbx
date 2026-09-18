@@ -2,8 +2,11 @@ services:
   app:
     build: .
     restart: unless-stopped
-    env_file:
-      - .env
+    environment:
+      AUTH_USER: ${AUTH_USER}
+      AUTH_PASS: ${AUTH_PASS}
+      MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-2048}
+      PORT: 8080
     expose:
       - "8080"
 
