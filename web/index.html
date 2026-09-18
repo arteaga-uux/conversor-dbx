@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conversor de correos .dbx</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --text: #1c1f24;
+    --muted: #666c76;
+    --border: #d9dce1;
+    --accent: #2c5ce6;
+    --accent-hover: #2149bd;
+    --error: #b3261e;
+    --ok: #1e7a34;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a;
+      --card: #1d2025;
+      --text: #eceef1;
+      --muted: #9aa1ab;
+      --border: #33373e;
+      --accent: #6d93ff;
+      --accent-hover: #8aa6ff;
+      --error: #ff8a80;
+      --ok: #6bd48a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 32px 16px;
+  }
+  main {
+    width: 100%;
+    max-width: 560px;
+  }
+  h1 {
+    font-size: 1.4rem;
+    margin: 0 0 4px;
+  }
+  p.subtitle {
+    color: var(--muted);
+    margin: 0 0 24px;
+    font-size: 0.95rem;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+  }
+  #dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 10px;
+    padding: 32px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  #dropzone.drag {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+  #dropzone p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.92rem;
+  }
+  #dropzone strong { color: var(--text); }
+  input[type="file"] { display: none; }
+  ul#filelist {
+    list-style: none;
+    margin: 16px 0 0;
+    padding: 0;
+    font-size: 0.88rem;
+  }
+  ul#filelist li {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+    color: var(--text);
+  }
+  ul#filelist li span.size { color: var(--muted); white-space: nowrap; }
+  button#convert {
+    margin-top: 20px;
+    width: 100%;
+    padding: 12px 16px;
+    border: none;
+    border-radius: 8px;
+    background: var(--accent);
+    color: white;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button#convert:hover:not(:disabled) { background: var(--accent-hover); }
+  button#convert:disabled { opacity: 0.55; cursor: not-allowed; }
+  #status {
+    margin-top: 14px;
+    font-size: 0.9rem;
+    min-height: 1.2em;
+  }
+  #status.error { color: var(--error); }
+  #status.ok { color: var(--ok); }
+  footer {
+    margin-top: 18px;
+    color: var(--muted);
+    font-size: 0.78rem;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<main>
+  <h1>Conversor de correos .dbx</h1>
+  <p class="subtitle">Subí uno o más archivos .dbx de Outlook Express y descargá el contenido en archivos de texto legibles.</p>
+
+  <div class="card">
+    <div id="dropzone">
+      <p><strong>Arrastrá tus archivos .dbx acá</strong><br>o hacé click para elegirlos</p>
+    </div>
+    <input type="file" id="fileInput" accept=".dbx" multiple>
+    <ul id="filelist"></ul>
+    <button id="convert" disabled>Convertir y descargar</button>
+    <div id="status"></div>
+  </div>
+
+  <footer>Los archivos se procesan y se borran del servidor en el momento; no quedan guardados.</footer>
+</main>
+
+<script>
+(function () {
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('fileInput');
+  const fileList = document.getElementById('filelist');
+  const convertBtn = document.getElementById('convert');
+  const status = document.getElementById('status');
+
+  let files = [];
+
+  function formatSize(bytes) {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  }
+
+  function renderList() {
+    fileList.innerHTML = '';
+    files.forEach(f => {
+      const li = document.createElement('li');
+      const name = document.createElement('span');
+      name.textContent = f.name;
+      const size = document.createElement('span');
+      size.className = 'size';
+      size.textContent = formatSize(f.size);
+      li.appendChild(name);
+      li.appendChild(size);
+      fileList.appendChild(li);
+    });
+    convertBtn.disabled = files.length === 0;
+  }
+
+  function addFiles(fileArray) {
+    const dbxOnly = fileArray.filter(f => f.name.toLowerCase().endsWith('.dbx'));
+    files = files.concat(dbxOnly);
+    renderList();
+    if (dbxOnly.length < fileArray.length) {
+      setStatus('Se ignoraron archivos que no son .dbx.', 'error');
+    }
+  }
+
+  function setStatus(msg, kind) {
+    status.textContent = msg || '';
+    status.className = kind || '';
+  }
+
+  dropzone.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    addFiles(Array.from(fileInput.files));
+    fileInput.value = '';
+  });
+
+  ['dragenter', 'dragover'].forEach(evt => {
+    dropzone.addEventListener(evt, e => {
+      e.preventDefault();
+      dropzone.classList.add('drag');
+    });
+  });
+  ['dragleave', 'drop'].forEach(evt => {
+    dropzone.addEventListener(evt, e => {
+      e.preventDefault();
+      dropzone.classList.remove('drag');
+    });
+  });
+  dropzone.addEventListener('drop', e => {
+    if (e.dataTransfer && e.dataTransfer.files) {
+      addFiles(Array.from(e.dataTransfer.files));
+    }
+  });
+
+  convertBtn.addEventListener('click', async () => {
+    if (files.length === 0) return;
+
+    convertBtn.disabled = true;
+    setStatus('Convirtiendo, puede tardar un poco con archivos grandes…', '');
+
+    const form = new FormData();
+    files.forEach(f => form.append('files', f, f.name));
+
+    try {
+      const res = await fetch('/convert', { method: 'POST', body: form });
+      if (!res.ok) {
+        const msg = await res.text();
+        throw new Error(msg || ('Error ' + res.status));
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'correos-en-texto.zip';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      setStatus('Listo. Se descargó el .zip con los correos en texto.', 'ok');
+      files = [];
+      renderList();
+    } catch (err) {
+      setStatus('No se pudo convertir: ' + err.message, 'error');
+    } finally {
+      convertBtn.disabled = files.length === 0;
+    }
+  });
+})();
+</script>
+</body>
+</html>
