@@ -9,3 +9,8 @@ services:
       PORT: 8080
     ports:
       - "127.0.0.1:8110:8080"
+    volumes:
+      - history_data:/data
+
+volumes:
+  history_data:

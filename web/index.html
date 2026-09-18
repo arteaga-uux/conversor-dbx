@@ -120,6 +120,49 @@
     font-size: 0.78rem;
     text-align: center;
   }
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .tabs button {
+    appearance: none;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--muted);
+    font-size: 0.92rem;
+    font-weight: 600;
+    padding: 8px 4px;
+    margin-right: 16px;
+    cursor: pointer;
+  }
+  .tabs button.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  table#historial {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+  }
+  table#historial th, table#historial td {
+    text-align: left;
+    padding: 8px 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  table#historial th {
+    color: var(--muted);
+    font-weight: 600;
+    font-size: 0.8rem;
+  }
+  #historialEmpty, #historialLoading {
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
 </style>
 </head>
 <body>
@@ -127,17 +170,37 @@
   <h1>Conversor de correos .dbx</h1>
   <p class="subtitle">Subí uno o más archivos .dbx de Outlook Express y descargá el contenido en archivos de texto legibles.</p>
 
-  <div class="card">
-    <div id="dropzone">
-      <p><strong>Arrastrá tus archivos .dbx acá</strong><br>o hacé click para elegirlos</p>
-    </div>
-    <input type="file" id="fileInput" accept=".dbx" multiple>
-    <ul id="filelist"></ul>
-    <button id="convert" disabled>Convertir y descargar</button>
-    <div id="status"></div>
+  <div class="tabs">
+    <button type="button" id="tabBtnConvertir" class="active">Convertir</button>
+    <button type="button" id="tabBtnArchivo">Archivo</button>
   </div>
 
-  <footer>Los archivos se procesan y se borran del servidor en el momento; no quedan guardados.</footer>
+  <div id="panelConvertir" class="panel active">
+    <div class="card">
+      <div id="dropzone">
+        <p><strong>Arrastrá tus archivos .dbx acá</strong><br>o hacé click para elegirlos</p>
+      </div>
+      <input type="file" id="fileInput" accept=".dbx" multiple>
+      <ul id="filelist"></ul>
+      <button id="convert" disabled>Convertir y descargar</button>
+      <div id="status"></div>
+    </div>
+    <footer>Los archivos se procesan y se borran del servidor en el momento; no quedan guardados.</footer>
+  </div>
+
+  <div id="panelArchivo" class="panel">
+    <div class="card">
+      <p id="historialLoading">Cargando…</p>
+      <p id="historialEmpty" style="display:none">Todavía no se convirtió ningún archivo.</p>
+      <table id="historial" style="display:none">
+        <thead>
+          <tr><th>Archivo</th><th>Mensajes</th><th>Fecha</th></tr>
+        </thead>
+        <tbody id="historialBody"></tbody>
+      </table>
+    </div>
+    <footer>Solo se guarda el nombre del archivo y la fecha de conversión, nunca su contenido.</footer>
+  </div>
 </main>
 
 <script>
@@ -244,6 +307,70 @@
       convertBtn.disabled = files.length === 0;
     }
   });
+
+  // --- Pestañas ---
+  const tabBtnConvertir = document.getElementById('tabBtnConvertir');
+  const tabBtnArchivo = document.getElementById('tabBtnArchivo');
+  const panelConvertir = document.getElementById('panelConvertir');
+  const panelArchivo = document.getElementById('panelArchivo');
+  const historialLoading = document.getElementById('historialLoading');
+  const historialEmpty = document.getElementById('historialEmpty');
+  const historialTable = document.getElementById('historial');
+  const historialBody = document.getElementById('historialBody');
+
+  function showTab(name) {
+    const isConvertir = name === 'convertir';
+    tabBtnConvertir.classList.toggle('active', isConvertir);
+    tabBtnArchivo.classList.toggle('active', !isConvertir);
+    panelConvertir.classList.toggle('active', isConvertir);
+    panelArchivo.classList.toggle('active', !isConvertir);
+    if (!isConvertir) loadHistorial();
+  }
+
+  tabBtnConvertir.addEventListener('click', () => showTab('convertir'));
+  tabBtnArchivo.addEventListener('click', () => showTab('archivo'));
+
+  async function loadHistorial() {
+    historialLoading.style.display = '';
+    historialEmpty.style.display = 'none';
+    historialTable.style.display = 'none';
+
+    try {
+      const res = await fetch('/historial');
+      if (!res.ok) throw new Error('Error ' + res.status);
+      const entries = await res.json();
+
+      historialLoading.style.display = 'none';
+
+      if (!entries || entries.length === 0) {
+        historialEmpty.style.display = '';
+        return;
+      }
+
+      historialBody.innerHTML = '';
+      entries.forEach(e => {
+        const tr = document.createElement('tr');
+
+        const tdName = document.createElement('td');
+        tdName.textContent = e.filename;
+
+        const tdCount = document.createElement('td');
+        tdCount.textContent = e.message_count;
+
+        const tdDate = document.createElement('td');
+        const d = new Date(e.converted_at);
+        tdDate.textContent = isNaN(d) ? e.converted_at : d.toLocaleString();
+
+        tr.appendChild(tdName);
+        tr.appendChild(tdCount);
+        tr.appendChild(tdDate);
+        historialBody.appendChild(tr);
+      });
+      historialTable.style.display = '';
+    } catch (err) {
+      historialLoading.textContent = 'No se pudo cargar el historial: ' + err.message;
+    }
+  }
 })();
 </script>
 </body>

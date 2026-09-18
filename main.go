@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"crypto/subtle"
 	"embed"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -19,6 +20,8 @@ import (
 
 //go:embed web/index.html
 var webFS embed.FS
+
+var history *historyStore
 
 func getEnv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
@@ -46,9 +49,12 @@ func main() {
 		log.Fatalf("no se pudo cargar la página embebida: %v", err)
 	}
 
+	history = newHistoryStore(getEnv("HISTORY_PATH", "/data/historial.json"))
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", handleIndex(indexPage))
 	mux.HandleFunc("/convert", handleConvert(maxUploadBytes))
+	mux.HandleFunc("/historial", handleHistorial)
 
 	handler := basicAuth(mux, authUser, authPass)
 
@@ -94,6 +100,15 @@ func handleIndex(page []byte) http.HandlerFunc {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		_, _ = w.Write(page)
 	}
+}
+
+func handleHistorial(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Método no permitido", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	_ = json.NewEncoder(w).Encode(history.List())
 }
 
 func handleConvert(maxUploadBytes int64) http.HandlerFunc {
@@ -209,6 +224,8 @@ func convertOneDBX(zw *zip.Writer, tempDir string, idx int, fh *multipart.FileHe
 		writeZipError(zw, folderName, "Este archivo .dbx no contiene mensajes (puede ser un índice de carpetas, no un buzón de correo).")
 		return
 	}
+
+	history.Append(fh.Filename, count)
 
 	for i := 0; i < count; i++ {
 		raw, sender, subject, sendDate, err := safeExtractMessage(dbx, i)
