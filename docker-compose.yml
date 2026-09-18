@@ -7,23 +7,5 @@ services:
       AUTH_PASS: ${AUTH_PASS}
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-2048}
       PORT: 8080
-    expose:
-      - "8080"
-
-  caddy:
-    build:
-      context: .
-      dockerfile: caddy/Dockerfile
-    restart: unless-stopped
     ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - caddy_data:/data
-      - caddy_config:/config
-    depends_on:
-      - app
-
-volumes:
-  caddy_data:
-  caddy_config:
+      - "127.0.0.1:8110:8080"

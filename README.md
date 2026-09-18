@@ -23,47 +23,65 @@ detrás de `conversor.revistavitul.com`.
 - La página está protegida con autenticación básica (usuario/clave del
   navegador), definida en `.env`.
 
-## Requisitos en el VPS (Hostinger)
+## Requisitos en el VPS
 
-Solo necesitás Docker. Si el VPS no lo tiene:
+- Docker (para el contenedor de la app).
+- nginx + certbot (para exponer `conversor.revistavitul.com` con HTTPS).
 
-```bash
-curl -fsSL https://get.docker.com | sh
-```
+Este proyecto **no trae su propio reverse proxy**: el `app` solo publica
+`127.0.0.1:8110` (loopback), y es el nginx que ya corre en el VPS — el mismo
+que sirve los demás sitios del servidor — el que expone eso al público con
+un vhost nuevo. Esto evita pisar los puertos 80/443 que ya usa nginx (y
+cualquier otro sitio existente en el mismo VPS).
 
 ## Deploy
 
-1. Copiá esta carpeta al VPS (por ejemplo con `scp -r` o `git clone` si la
-   subís a un repo propio).
-2. Copiá `.env.example` a `.env` y completá `AUTH_USER` / `AUTH_PASS` con
-   una clave real (evitá dejarlos vacíos: sin eso la página queda abierta
-   a cualquiera que tenga la URL).
+Se puede desplegar desde el **Administrador de Docker** de Hostinger
+("Componer" → "Componer desde URL", apuntando a la URL cruda de
+`docker-compose.yml` de este repo en GitHub) o a mano por SSH con
+`docker compose up -d --build`. En ambos casos hace falta cargar las
+variables de entorno (`AUTH_USER`, `AUTH_PASS`, `MAX_UPLOAD_MB`) — copiá
+`.env.example` como referencia y NO dejes `AUTH_USER`/`AUTH_PASS` vacíos, o
+la página queda abierta a cualquiera que tenga la URL.
 
-   ```bash
-   cp .env.example .env
-   nano .env
-   ```
-
-3. En tu proveedor de DNS, agregá un registro **A** para
-   `conversor.revistavitul.com` apuntando a la IP del VPS. Esto tiene que
-   estar propagado antes del paso 4, porque Caddy pide el certificado TLS
-   automáticamente la primera vez que alguien entra.
-4. Levantá todo:
-
-   ```bash
-   docker compose up -d --build
-   ```
-
-   Esto levanta dos contenedores: `app` (el conversor) y `caddy` (que
-   sirve `https://conversor.revistavitul.com` con certificado automático
-   de Let's Encrypt y le pasa el tráfico a `app`).
-5. Entrá a `https://conversor.revistavitul.com`, te va a pedir el usuario y
-   clave que pusiste en `.env`, y ya podés subir archivos `.dbx`.
-
-Para actualizar después de un cambio de código:
+Una vez que el contenedor está corriendo en `127.0.0.1:8110`, falta el vhost
+de nginx (agregar, no reemplazar nada de lo que ya había):
 
 ```bash
-git pull   # o volver a copiar los archivos
+cat > /etc/nginx/sites-available/conversor-dbx <<'EOF'
+server {
+    server_name conversor.revistavitul.com;
+
+    client_max_body_size 2100m;
+
+    location / {
+        proxy_pass http://127.0.0.1:8110;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 600s;
+    }
+
+    listen 80;
+}
+EOF
+ln -s /etc/nginx/sites-available/conversor-dbx /etc/nginx/sites-enabled/conversor-dbx
+nginx -t && systemctl reload nginx
+certbot --nginx -d conversor.revistavitul.com
+```
+
+`certbot` reescribe ese archivo para agregar HTTPS (igual que hace con los
+otros sitios del VPS), y de ahí en adelante renueva el certificado solo.
+
+Para actualizar después de un cambio de código (desde el Administrador de
+Docker de Hostinger: **Eliminar** el proyecto y volver a **Componer desde
+URL** — el editor de "Actualizar" no vuelve a construir la imagen. Por SSH
+alcanza con):
+
+```bash
+git pull
 docker compose up -d --build
 ```
 
